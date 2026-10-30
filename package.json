@@ -2,6 +2,7 @@
   "name": "flexspeed",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@12.16.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
