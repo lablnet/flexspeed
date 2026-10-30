@@ -1,6 +1,10 @@
 # Flexspeed
 
-A React + TypeScript speed test with an original browser measurement engine, Cloudflare Worker API, D1 result storage, Google login through Better Auth, and R2 social-preview posters. No third-party measurement endpoint or analytics scripts.
+A React and TypeScript internet speed test that measures your browser’s connection to a Cloudflare Worker, with D1 result history, Google sign-in, and shareable social preview images.
+
+The browser times requests and calculates speed, latency and jitter. The Worker sends download data, receives uploads and answers latency requests. Together they measure the connection between the visitor and Cloudflare’s edge. The measurement code is implemented in this repository, without Cloudflare’s speed-test package or a third-party measurement endpoint.
+
+Live app: [flexspeed.lablnet.com](https://flexspeed.lablnet.com).
 
 ## Develop
 
@@ -8,9 +12,12 @@ Requires Node.js 22.13+ and pnpm (Node 24+ recommended).
 
 ```sh
 pnpm install
+cp .dev.vars.example .dev.vars
 pnpm run db:migrate
 pnpm dev
 ```
+
+**Check resource bindings before starting:** `remote: true` in `wrangler.jsonc` connects local development to the real Cloudflare resource. Set it to `false` or remove it from the D1 and R2 bindings to use local storage. `db:migrate` applies migrations locally; use `db:migrate:remote` deliberately for the deployed database.
 
 The Cloudflare Vite plugin runs the Worker alongside React locally. Open the URL Vite prints. Local results measure your device to the local Worker, **not your internet connection**. IP, ISP, location and edge metadata are available only after deployment; the UI labels local mode explicitly.
 
@@ -28,7 +35,71 @@ pnpm exec wrangler d1 create flexspeed
 pnpm exec wrangler r2 bucket create flexspeed-posters
 ```
 
-Replace the placeholder D1 database ID in `wrangler.jsonc` with the command's output. Then build, apply remote migrations, configure Worker secrets, and deploy with `pnpm run deploy`. Follow the complete [deployment and Google OAuth setup](docs/deployment.md), including CPU requirements for PNG rendering. Cloud storage and Google credentials have not been provisioned by this change.
+For a new deployment, configure these bindings in `wrangler.jsonc` using your own resources. Existing deployments can reuse their database and bucket.
+
+| Binding   | Resource                                                          |
+| --------- | ----------------------------------------------------------------- |
+| `DB`      | D1 database `flexspeed`; use the database ID returned by Wrangler |
+| `POSTERS` | R2 bucket `flexspeed-posters`                                     |
+
+If Wrangler adds bindings automatically, use the binding names above. Enable R2 in the Cloudflare dashboard if bucket creation asks you to do so.
+
+Configure secrets, apply migrations, and deploy:
+
+```sh
+pnpm exec wrangler secret put SESSION_SECRET
+pnpm exec wrangler secret put BETTER_AUTH_SECRET
+pnpm exec wrangler secret put BETTER_AUTH_URL
+pnpm exec wrangler secret put GOOGLE_CLIENT_ID
+pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET
+pnpm run db:migrate:remote
+pnpm run deploy
+```
+
+Use `pnpm run deploy` explicitly: `pnpm deploy` is also a built-in pnpm command.
+
+Follow the complete [deployment and Google OAuth setup](docs/deployment.md), including CPU requirements for PNG rendering.
+
+## Automatic deployment from main
+
+Connect the existing `flexspeed` Worker to the repository under **Workers & Pages → flexspeed → Settings → Builds**. Use these settings:
+
+| Setting           | Value                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Production branch | `main`                                                                                                                    |
+| Disable builds    | Off                                                                                                                       |
+| Build command     | `pnpm test && pnpm run build`                                                                                             |
+| Deploy command    | `pnpm exec wrangler deploy`                                                                                               |
+| Root directory    | The repository folder containing this app's `package.json` and `wrangler.jsonc`; `/` if the app is at the repository root |
+| Preview builds    | Optional; leave disabled for a production-only setup                                                                      |
+
+Cloudflare installs dependencies before running the build command. Commit the pnpm lockfile, and use a Node version compatible with the development requirements above. Keep the Worker name in Wrangler consistent with the existing `flexspeed` Worker.
+
+After connecting, pushes to `main` run tests, build the client and Worker, and deploy on success. The deploy command above avoids rebuilding a second time. Existing runtime secrets remain configured on the Worker; build variables are a separate setting.
+
+Apply new D1 migrations with `pnpm run db:migrate:remote` before deploying code that requires them. The commands above do not run migrations automatically. If enabling previews later, configure their resource isolation and authentication origins before using account or result-saving features.
+
+See [Cloudflare Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/) for the available settings.
+
+## Environment and Google login
+
+Local values go in `.dev.vars`, which is ignored by Git. Production values are configured through Wrangler secrets. Never put secret values in client code or commit them.
+
+| Variable               | Purpose                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `SESSION_SECRET`       | Signs short-lived measurement tokens bound to the visitor's IP; separate from account login                        |
+| `BETTER_AUTH_SECRET`   | Protects Better Auth authentication; use an independent random secret of at least 32 bytes                         |
+| `BETTER_AUTH_URL`      | Canonical app origin: `https://flexspeed.lablnet.com` in production, `http://localhost:5173` for local development |
+| `GOOGLE_CLIENT_ID`     | Google OAuth web application's client ID                                                                           |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth web application's client secret                                                                       |
+
+Create a **Web application** OAuth client in your Google Cloud project. Configure the production JavaScript origin as `https://flexspeed.lablnet.com` and the redirect URI as:
+
+```text
+https://flexspeed.lablnet.com/api/auth/callback/google
+```
+
+For local login, add the local origin and corresponding `/api/auth/callback/google` redirect URI. The configured origin and actual Vite port must agree. Google provides the sign-in identity, so there is no separate app email/password or email-verification flow. Visitors can run tests and share results without signing in.
 
 ## API
 
@@ -50,6 +121,22 @@ Replace the placeholder D1 database ID in `wrangler.jsonc` with the command's ou
 
 Measurement endpoints require `Authorization: Bearer <session>`. Sessions are limited to 10 starts per minute per IP using the Worker rate-limit binding. Cross-origin browser requests are rejected. Request sizes and transfer duration are bounded. Session tokens can be reused within their lifetime; this is basic abuse protection, not a strict per-user bandwidth quota. Set additional account-level traffic monitoring and edge controls appropriate to a public deployment. Avoid challenges or compression rules on measurement routes.
 
+## Client state and architecture
+
+```text
+Measurement engine → Zustand measurement store → React subscribers
+Completed test → result persistence → Worker → D1 + R2 poster
+Google sign-in → Better Auth → account history and browser-history sync
+```
+
+`src/client/engine/state.ts` creates the vanilla Zustand measurement store. The engine writes progress, metrics and immutable sample arrays directly to it; components subscribe with Zustand's `useStore`. Byte usage accumulates between progress updates to avoid rendering for every network chunk. Each new run resets its measurement state.
+
+`src/client/stores/TestRuntime.tsx` stays mounted above the routes. It runs the history, persistence and authentication integration hooks once and publishes their actions through `testModel.ts`. There is no TestContext or custom `emit()` callback. Page navigation keeps an active test running.
+
+Authentication remains in its own context. Before logout, the history hook waits for pending saves, syncs browser entries and fetches an account snapshot. It returns a commit function that copies that snapshot into browser history only after logout succeeds. Registration and cleanup live in `useSignOutPreparation.ts`.
+
+The shared API transport in `src/client/api/request.ts` handles fetch and HTTP errors. Measurement requests keep their response bodies available for streaming; JSON endpoints use `requestJson`. `MeasurementClient` adds measurement tokens, cancellation and deadlines.
+
 ## Measurement method
 
 - Warm the connection, then take 12 sequential HTTP latency samples. Report the median and mean absolute consecutive delta (jitter).
@@ -62,6 +149,14 @@ Measurement endpoints require `Authorization: Bearer <session>`. Sessions are li
 
 Results measure the browser-to-Cloudflare path, not a universal ISP line speed. Wi-Fi, VPNs, browser overhead, network routing and device performance influence results. The connected edge is routing-selected and may not be geographically closest. This app does not measure ICMP ping, Wi-Fi SSID, raw packet loss or DNS latency. Calibrate deployed results across real connections before claiming production measurement accuracy.
 
+## Social previews
+
+Each saved result gets a public `/r/:id` link with server-rendered Open Graph and Twitter metadata. The poster contains download/upload speeds and latency metrics.
+
+The Worker turns the SVG poster template into a 1200×630 PNG using `@resvg/resvg-wasm`. `initWasm` and `Resvg` are the JavaScript API; `index_bg.wasm` is the WebAssembly rendering engine from the same package. The bundled Inter font (`src/worker/assets/inter.bin`) ensures text can render in the Worker; keep its accompanying license in the repository.
+
+PNG files are stored in the private `POSTERS` R2 bucket and served through `/og/:id.png`. Generation runs after measurement; the poster endpoint can retry generation when needed. Public results and images exclude IP addresses and account details.
+
 ## Privacy and storage
 
 Every completed result is submitted to D1, including full public IP, network/connection metadata, available browser/device information, metrics and chart samples. Records and R2 posters have no automatic expiration. Logged-in deletion sets `deleted_at`, retaining the underlying data while hiding it and revoking public endpoint access. Login syncs guest browser history into the account and clears acknowledged local entries. Signed-in tests save directly to account history. Logout copies the latest 20 non-deleted account results into browser history. Public pages and posters exclude IP and account details. See `/privacy` in the app and [data behavior](docs/deployment.md#behavior-and-data-ownership).
@@ -70,12 +165,15 @@ History and theme preferences tolerate unavailable local storage. Worker observa
 
 ## Source layout
 
-- `src/client/App.tsx`: React Router route composition only (`/`, `/history`, `/about`)
-- `src/client/pages/`: routed speed-test, history, methodology and not-found pages
+- `src/client/App.tsx`: React Router composition (`/`, `/history`, `/about`, `/login`, `/privacy`, `/r/:id`, and the not-found route)
+- `src/client/pages/`: routed test, history, login, public result, privacy, methodology and not-found pages
 - `src/client/components/`: reusable layout, chart, test-control and result components
 - `src/client/hooks/`: engine lifecycle, network metadata, history and theme hooks
-- `src/client/context/`: shared test state that survives page navigation
-- `src/client/engine/`: independent orchestration, HTTP client, state snapshots, latency sampling, transfer scheduling, progress and byte transport modules
+- `src/client/stores/`: Zustand app actions and the persistent runtime bridge
+- `src/client/auth/`: authentication context, session lifecycle and logout preparation
+- `src/client/api/`: shared HTTP transport and result/history endpoints
+- `src/client/history/`: account import and browser snapshot helpers
+- `src/client/engine/`: independent orchestration, HTTP client, Zustand measurement state, latency sampling, transfer scheduling, progress and byte transport modules
 - `src/client/utils/`: shared formatting and resilient browser storage
 - `src/worker/index.ts`: Worker entry point only
 - `src/worker/router.ts`: endpoint registration and shared request policy
@@ -87,8 +185,19 @@ History and theme preferences tolerate unavailable local storage. Worker observa
 - `migrations/`: D1 authentication and result schema
 - `src/worker/http/`: shared request and response helpers
 - `src/shared/`: shared contracts and statistics
-- `tests/`: statistics and API integrity tests
+- `tests/`: measurement, API integrity, history ownership and React login/logout lifecycle tests
 
-The app includes light/dark themes, responsive charts and layout, reduced-motion support and a data-saver mode. No Cloudflare credentials or deployment are included.
+The app includes light/dark themes, responsive charts and layout, reduced-motion support and a data-saver mode. Provision Cloudflare resources and Google OAuth credentials in your own account.
 
 Use `pnpm format` to format source and configuration, and `pnpm format:check` to verify formatting. Comments document measurement decisions, lifecycle boundaries, and cancellation behavior. Each module owns a focused responsibility; React components do not perform measurement requests directly.
+
+## Checks
+
+```sh
+pnpm run typecheck
+pnpm test
+pnpm run format:check
+pnpm build
+```
+
+`pnpm run test:smoke` exercises the API against a running instance. Inspect `scripts/smoke.mjs` before running it against a deployment: integration requests can use bandwidth and create stored results. Prefer an isolated development environment.
