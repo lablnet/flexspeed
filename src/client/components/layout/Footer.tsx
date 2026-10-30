@@ -14,6 +14,8 @@ export function Footer() {
         <span aria-hidden="true">·</span>
         <Link to="/privacy">Data & privacy</Link>
         <span aria-hidden="true">·</span>
+        <a href="https://github.com/lablnet/flexspeed/">GitHub</a>
+        <span aria-hidden="true">·</span>
         <span>Hosted on Cloudflare</span>
         <span aria-hidden="true">·</span>
         <span>
