@@ -8,6 +8,10 @@ export function Footer() {
         <Zap size={15} fill="currentColor" /> flexspeed<span className="brand-dot">.</span>
       </span>
       <div className="footer-credits">
+        <span aria-label={`Version ${import.meta.env.VITE_APP_VERSION}`}>
+          v{import.meta.env.VITE_APP_VERSION}
+        </span>
+        <span aria-hidden="true">·</span>
         <Link to="/privacy">Data & privacy</Link>
         <span aria-hidden="true">·</span>
         <span>Hosted on Cloudflare</span>
