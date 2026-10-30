@@ -1,3 +1,4 @@
+import { connectionDetails } from '../http/connection';
 import { isLocalRequest } from '../http/request';
 
 /** Keep the full connection metadata privately, without cookies or auth headers. */
@@ -6,6 +7,7 @@ export function captureNetwork(request: Request, url: URL): Record<string, unkno
     ? undefined
     : (request.cf as IncomingRequestCfProperties | undefined);
   return {
+    ...connectionDetails(request, url),
     network: cf?.asOrganization ?? null,
     asn: cf?.asn ?? null,
     city: cf?.city ?? null,

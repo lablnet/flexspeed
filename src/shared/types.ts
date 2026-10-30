@@ -9,6 +9,8 @@ export interface NetworkInfo {
   country: string | null;
   colo: string | null;
   local: boolean;
+  httpProtocol?: string | null;
+  ipVersion?: 'IPv4' | 'IPv6' | null;
 }
 export interface Sample {
   time: number;

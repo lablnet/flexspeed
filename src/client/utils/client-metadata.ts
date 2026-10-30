@@ -1,10 +1,7 @@
+import { browserConnectionSnapshot } from './browser-connection';
+
 /** Capture available browser context, without requesting location permissions. */
 export function clientMetadata(): Record<string, unknown> {
-  const connection = (
-    navigator as Navigator & {
-      connection?: { effectiveType?: string; downlink?: number; rtt?: number; saveData?: boolean };
-    }
-  ).connection;
   return {
     userAgent: navigator.userAgent,
     language: navigator.language,
@@ -18,13 +15,6 @@ export function clientMetadata(): Record<string, unknown> {
       pixelRatio: devicePixelRatio,
       colorDepth: screen.colorDepth,
     },
-    connection: connection
-      ? {
-          effectiveType: connection.effectiveType,
-          downlink: connection.downlink,
-          rtt: connection.rtt,
-          saveData: connection.saveData,
-        }
-      : null,
+    connection: browserConnectionSnapshot(),
   };
 }

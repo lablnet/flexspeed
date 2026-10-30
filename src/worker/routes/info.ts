@@ -1,3 +1,4 @@
+import { connectionDetails } from '../http/connection';
 import type { NetworkInfo } from '../../shared/types';
 import type { RouteContext } from '../types';
 import { isLocalRequest } from '../http/request';
@@ -9,6 +10,7 @@ export function infoRoute({ request, url }: RouteContext): Response {
   const cf = local ? undefined : (request.cf as IncomingRequestCfProperties | undefined);
   const info: NetworkInfo = {
     ip: local ? null : request.headers.get('CF-Connecting-IP'),
+    ...connectionDetails(request, url),
     network: cf?.asOrganization ?? null,
     asn: cf?.asn ?? null,
     city: cf?.city ?? null,

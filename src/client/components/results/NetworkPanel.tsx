@@ -1,3 +1,5 @@
+import { useBrowserConnection } from '../../hooks/useBrowserConnection';
+import { connectionTypeLabel } from '../../utils/browser-connection';
 import { useState } from 'react';
 import { Wifi } from 'lucide-react';
 import type { NetworkInfo } from '../../../shared/types';
@@ -9,6 +11,7 @@ export function NetworkPanel({
   info: NetworkInfo | null;
   infoError: boolean;
 }) {
+  const connection = useBrowserConnection();
   const [showIp, setShowIp] = useState(false);
   return (
     <section className="panel network-panel">
@@ -51,7 +54,31 @@ export function NetworkPanel({
             {info?.colo ? `${info.colo} · Cloudflare edge` : 'Local Worker'}
           </dd>
         </div>
+        <div>
+          <dt>HTTP protocol</dt>
+          <dd>{info?.httpProtocol ?? 'Unavailable'}</dd>
+        </div>
+        <div>
+          <dt>IP version</dt>
+          <dd>{info?.ipVersion ?? 'Unavailable'}</dd>
+        </div>
+        <div>
+          <dt>Connection type</dt>
+          <dd>{connectionTypeLabel(connection?.type)}</dd>
+        </div>
+        <div>
+          <dt>Browser estimate</dt>
+          <dd>
+            {connection?.effectiveType
+              ? `${connection.effectiveType.toUpperCase()}-like performance`
+              : 'Unavailable'}
+          </dd>
+        </div>
       </dl>
+      <p className="muted-copy">
+        Protocol and IP version describe the details request. Connection type depends on browser
+        support; the performance estimate does not identify your mobile generation.
+      </p>
     </section>
   );
 }
