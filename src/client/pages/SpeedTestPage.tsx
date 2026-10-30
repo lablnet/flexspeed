@@ -1,3 +1,4 @@
+import { QualityPanel } from '../components/results/QualityPanel';
 import { useStore } from 'zustand';
 import { measurementStore } from '../engine/state';
 import { ArrowDown, ArrowUp, CircleHelp, Radio } from 'lucide-react';
@@ -70,6 +71,13 @@ export function SpeedTestPage() {
           <CircleHelp size={18} />
           {state.error}
         </div>
+      )}
+      {state.phase === 'complete' && (
+        <QualityPanel
+          metrics={state.metrics}
+          downloadSamples={state.downloadSamples}
+          local={info?.local}
+        />
       )}
       <MeasurementCharts state={state} />
       <ResultSharePanel />

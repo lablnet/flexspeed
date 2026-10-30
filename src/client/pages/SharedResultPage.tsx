@@ -1,3 +1,4 @@
+import { QualityPanel } from '../components/results/QualityPanel';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp } from 'lucide-react';
@@ -73,6 +74,7 @@ export function SharedResultPage() {
             </div>
             <LatencyPanel metrics={result.metrics} />
           </div>
+          <QualityPanel metrics={result.metrics} downloadSamples={result.samples.download} />
           <MeasurementCharts
             state={{
               ...initialState(),

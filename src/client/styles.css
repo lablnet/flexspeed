@@ -1278,3 +1278,67 @@ td small {
     padding: 20px;
   }
 }
+
+/* Experience verdicts reuse the result panels and theme colors. */
+.quality-section {
+  margin-top: 24px;
+}
+.quality-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+.quality-card {
+  padding: 22px;
+}
+.quality-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 550;
+  margin: 0 0 18px;
+}
+.quality-card h3 svg {
+  color: var(--muted);
+}
+.quality-grade {
+  display: inline-block;
+  font:
+    600 24px Manrope,
+    sans-serif;
+}
+.quality-excellent,
+.quality-good {
+  color: var(--green);
+}
+.quality-fair {
+  color: #987026;
+}
+.quality-poor {
+  color: #ad5e42;
+}
+.quality-unavailable {
+  color: var(--muted);
+}
+.quality-card p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin-bottom: 0;
+}
+[data-theme='dark'] .quality-fair {
+  color: #dfb765;
+}
+[data-theme='dark'] .quality-poor {
+  color: #efab90;
+}
+@media (max-width: 800px) {
+  .quality-grid {
+    grid-template-columns: 1fr;
+  }
+  .quality-section > .section-heading {
+    flex-wrap: wrap;
+  }
+}

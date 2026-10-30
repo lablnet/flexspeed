@@ -149,6 +149,27 @@ The shared API transport in `src/client/api/request.ts` handles fetch and HTTP e
 
 Results measure the browser-to-Cloudflare path, not a universal ISP line speed. Wi-Fi, VPNs, browser overhead, network routing and device performance influence results. The connected edge is routing-selected and may not be geographically closest. This app does not measure ICMP ping, Wi-Fi SSID, raw packet loss or DNS latency. Calibrate deployed results across real connections before claiming production measurement accuracy.
 
+## Estimated experience
+
+Completed tests and public result pages show Streaming, Gaming and Video calls verdicts: Excellent, Good, Fair, Poor or Unavailable. These are product heuristics calculated from existing measurements, not standardized QoS scores or guarantees for a particular service. They add no test traffic and require no schema migration. Local test results do not show the experience panel on the test page.
+
+The pure calculation lives in `src/shared/quality.ts`; both pages use `QualityPanel`. The weakest relevant measurement determines the verdict:
+
+| Measurement            | Excellent | Good     | Fair      |
+| ---------------------- | --------- | -------- | --------- |
+| Streaming download     | ≥25 Mbps  | ≥10 Mbps | ≥3 Mbps   |
+| Gaming idle latency    | ≤30 ms    | ≤60 ms   | ≤100 ms   |
+| Gaming jitter          | ≤5 ms     | ≤15 ms   | ≤30 ms    |
+| Gaming loaded latency  | ≤60 ms    | ≤120 ms  | ≤200 ms   |
+| Calling download       | ≥10 Mbps  | ≥5 Mbps  | ≥1.5 Mbps |
+| Calling upload         | ≥5 Mbps   | ≥3 Mbps  | ≥1 Mbps   |
+| Calling jitter         | ≤10 ms    | ≤20 ms   | ≤40 ms    |
+| Calling loaded latency | ≤100 ms   | ≤200 ms  | ≤400 ms   |
+
+Measurements worse than the Fair boundary receive Poor. Loaded latency uses the worse of the download-loaded and upload-loaded medians. With at least three valid download samples, streaming uses the lower of aggregate speed and the sample 20th percentile to account for repeated dips; otherwise it explains that consistency could not be assessed. Missing, negative or non-finite required metrics produce Unavailable. Upload acknowledgement chart gaps are not treated as packet loss or reliable evidence of stalls.
+
+These short HTTP measurements target Cloudflare's edge. Actual game servers, streaming providers and calling services may behave differently. Packet loss is not measured.
+
 ## Social previews
 
 Each saved result gets a public `/r/:id` link with server-rendered Open Graph and Twitter metadata. The poster contains download/upload speeds and latency metrics.
